@@ -4,6 +4,8 @@ import type { Schema } from '../../amplify/data/resource';
 
 const client = generateClient<Schema>();
 
+const ALIAS_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 interface Props {
   onClose: () => void;
   onCreated: () => void;
@@ -13,19 +15,44 @@ interface Props {
 export function CreateWishlistModal({ onClose, onCreated, ownerName }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [alias, setAlias] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+
+    const trimmedAlias = alias.trim().toLowerCase();
+    if (trimmedAlias) {
+      if (!ALIAS_RE.test(trimmedAlias)) {
+        setError('Alias must be lowercase letters, numbers, and hyphens only.');
+        return;
+      }
+      if (trimmedAlias.length > 60) {
+        setError('Alias must be 60 characters or fewer.');
+        return;
+      }
+    }
+
     setLoading(true);
     setError('');
     try {
+      // Check alias uniqueness before creating
+      if (trimmedAlias) {
+        const { data: existing } = await client.models.Wishlist.listWishlistByAlias({ alias: trimmedAlias });
+        if (existing.length > 0) {
+          setError('That alias is already taken. Try another.');
+          setLoading(false);
+          return;
+        }
+      }
+
       await client.models.Wishlist.create({
         name: name.trim(),
         description: description.trim() || undefined,
         ownerName,
+        alias: trimmedAlias || undefined,
       });
       onCreated();
       onClose();
@@ -68,6 +95,22 @@ export function CreateWishlistModal({ onClose, onCreated, ownerName }: Props) {
                 rows={3}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Custom URL alias <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-gray-400 whitespace-nowrap">/wishlist/</span>
+                <input
+                  type="text"
+                  value={alias}
+                  onChange={(e) => setAlias(e.target.value.toLowerCase())}
+                  placeholder="e.g. jeff-christmas-2026"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, and hyphens only.</p>
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-3 pt-2">

@@ -9,6 +9,7 @@ interface Wishlist {
   id: string;
   name: string;
   description?: string | null;
+  alias?: string | null;
   createdAt?: string;
 }
 
@@ -41,7 +42,8 @@ export function WishlistCard({ wishlist, onDeleted }: Props) {
   }
 
   function copyShareLink() {
-    const url = `${window.location.origin}/wishlist/${wishlist.id}`;
+    const slug = wishlist.alias ?? wishlist.id;
+    const url = `${window.location.origin}/wishlist/${slug}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -57,7 +59,7 @@ export function WishlistCard({ wishlist, onDeleted }: Props) {
       </div>
       <div className="flex gap-2 mt-auto">
         <Link
-          to={`/wishlist/${wishlist.id}`}
+          to={`/wishlist/${wishlist.alias ?? wishlist.id}`}
           className="flex-1 text-center bg-amber-500 text-white rounded-lg py-2 text-sm font-medium hover:bg-amber-600 transition-colors"
         >
           View list

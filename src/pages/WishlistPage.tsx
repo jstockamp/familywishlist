@@ -23,6 +23,9 @@ type SortDir = 'asc' | 'desc';
 
 const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ALIAS_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 function parsePrice(p: string | null | undefined): number {
   if (!p) return Infinity;
   const n = parseFloat(p.replace(/[^0-9.]/g, ''));
@@ -87,12 +90,14 @@ function ColHeader({ label, col, active, dir, className = '', onClick }: ColHead
 }
 
 export function WishlistPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id: idParam } = useParams<{ id: string }>();
   const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
 
+  const [wishlistId, setWishlistId] = useState('');
   const [wishlistName, setWishlistName] = useState('');
   const [wishlistDescription, setWishlistDescription] = useState('');
   const [wishlistOwnerName, setWishlistOwnerName] = useState('');
+  const [wishlistAlias, setWishlistAlias] = useState<string | null>(null);
   const [items, setItems] = useState<ListedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -104,16 +109,36 @@ export function WishlistPage() {
   const [sortCol, setSortCol] = useState<SortColumn>('priority');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
+  // Alias editing state
+  const [editingAlias, setEditingAlias] = useState(false);
+  const [aliasInput, setAliasInput] = useState('');
+  const [aliasSaving, setAliasSaving] = useState(false);
+  const [aliasError, setAliasError] = useState('');
+
   const loadWishlist = useCallback(async () => {
-    if (!id) return;
+    if (!idParam) return;
     setLoading(true);
     const readClient = authStatus === 'authenticated' ? authClient : guestClient;
     try {
-      const { data: wl } = await readClient.models.Wishlist.get({ id });
+      let wl: Schema['Wishlist']['type'] | null | undefined = null;
+
+      if (UUID_RE.test(idParam)) {
+        // Direct ID lookup
+        const { data } = await readClient.models.Wishlist.get({ id: idParam });
+        wl = data;
+      } else {
+        // Alias lookup via secondary index
+        const { data } = await readClient.models.Wishlist.listWishlistByAlias({ alias: idParam });
+        wl = data[0] ?? null;
+      }
+
       if (!wl) { setNotFound(true); return; }
+
+      setWishlistId(wl.id);
       setWishlistName(wl.name);
       setWishlistDescription(wl.description ?? '');
       setWishlistOwnerName(wl.ownerName ?? '');
+      setWishlistAlias(wl.alias ?? null);
 
       if (authStatus === 'authenticated') {
         try {
@@ -124,7 +149,7 @@ export function WishlistPage() {
 
       // Load junction records, then fetch each Item
       const { data: junctions } = await readClient.models.WishlistItem.list({
-        filter: { wishlistId: { eq: id } },
+        filter: { wishlistId: { eq: wl.id } },
       });
       const itemResults = await Promise.all(
         junctions.map((j) => readClient.models.Item.get({ id: j.itemId }))
@@ -139,7 +164,7 @@ export function WishlistPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, authStatus]);
+  }, [idParam, authStatus]);
 
   useEffect(() => { loadWishlist(); }, [loadWishlist]);
 
@@ -179,10 +204,66 @@ export function WishlistPage() {
     });
   }, [items]);
 
+  function shareUrl() {
+    return wishlistAlias
+      ? `${window.location.origin}/wishlist/${wishlistAlias}`
+      : `${window.location.origin}/wishlist/${wishlistId}`;
+  }
+
   function copyShareLink() {
-    navigator.clipboard.writeText(window.location.href);
+    navigator.clipboard.writeText(shareUrl());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function startEditAlias() {
+    setAliasInput(wishlistAlias ?? '');
+    setAliasError('');
+    setEditingAlias(true);
+  }
+
+  function cancelEditAlias() {
+    setEditingAlias(false);
+    setAliasError('');
+  }
+
+  async function saveAlias() {
+    const trimmed = aliasInput.trim().toLowerCase();
+
+    if (trimmed && !ALIAS_RE.test(trimmed)) {
+      setAliasError('Only lowercase letters, numbers, and hyphens allowed.');
+      return;
+    }
+    if (trimmed.length > 60) {
+      setAliasError('Alias must be 60 characters or fewer.');
+      return;
+    }
+
+    setAliasSaving(true);
+    setAliasError('');
+    try {
+      // Check for conflicts (skip check if clearing or keeping the same)
+      if (trimmed && trimmed !== wishlistAlias) {
+        const { data: existing } = await authClient.models.Wishlist.listWishlistByAlias({ alias: trimmed });
+        if (existing.length > 0) {
+          setAliasError('That alias is already taken. Try another.');
+          setAliasSaving(false);
+          return;
+        }
+      }
+
+      await authClient.models.Wishlist.update({
+        id: wishlistId,
+        alias: trimmed || null,
+      });
+      setWishlistAlias(trimmed || null);
+      setEditingAlias(false);
+    } catch (err) {
+      console.error(err);
+      setAliasError('Failed to save alias. Please try again.');
+    } finally {
+      setAliasSaving(false);
+    }
   }
 
   if (loading) {
@@ -221,6 +302,63 @@ export function WishlistPage() {
               )}
               {wishlistDescription && (
                 <p className="text-gray-600 text-sm mt-1">{wishlistDescription}</p>
+              )}
+
+              {/* Alias row — visible to owner */}
+              {isOwner && (
+                <div className="mt-2">
+                  {editingAlias ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">/wishlist/</span>
+                      <input
+                        type="text"
+                        value={aliasInput}
+                        onChange={(e) => setAliasInput(e.target.value.toLowerCase())}
+                        placeholder="e.g. jeff-christmas-2026"
+                        className="text-sm border border-gray-300 rounded-lg px-2 py-1 w-52 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveAlias();
+                          if (e.key === 'Escape') cancelEditAlias();
+                        }}
+                      />
+                      <button
+                        onClick={saveAlias}
+                        disabled={aliasSaving}
+                        className="text-xs px-2 py-1 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+                      >
+                        {aliasSaving ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        onClick={cancelEditAlias}
+                        className="text-xs px-2 py-1 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      {aliasError && <span className="text-xs text-red-500">{aliasError}</span>}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={startEditAlias}
+                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-amber-600 transition-colors group"
+                    >
+                      {wishlistAlias ? (
+                        <>
+                          <span className="font-mono text-gray-500">/wishlist/{wishlistAlias}</span>
+                          <span className="text-gray-300 group-hover:text-amber-500">✏</span>
+                        </>
+                      ) : (
+                        <span className="border border-dashed border-gray-300 rounded px-2 py-0.5 hover:border-amber-400">
+                          + Set custom URL alias
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+              {/* Show alias to non-owners if set */}
+              {!isOwner && wishlistAlias && (
+                <p className="text-xs text-gray-400 mt-1 font-mono">/wishlist/{wishlistAlias}</p>
               )}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -261,6 +399,7 @@ export function WishlistPage() {
               )}
               <button
                 onClick={copyShareLink}
+                title={shareUrl()}
                 className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 {copied ? '✓ Copied!' : '🔗 Share'}
@@ -331,10 +470,10 @@ export function WishlistPage() {
         )}
       </main>
 
-      {showAddItem && id && (
+      {showAddItem && wishlistId && (
         <AddItemModal
           mode="wishlist"
-          wishlistId={id}
+          wishlistId={wishlistId}
           onClose={() => setShowAddItem(false)}
           onAdded={loadWishlist}
         />

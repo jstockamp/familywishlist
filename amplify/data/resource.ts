@@ -29,8 +29,10 @@ const schema = a.schema({
       name: a.string().required(),
       description: a.string(),
       ownerName: a.string(),
+      alias: a.string(),
       items: a.hasMany('WishlistItem', 'wishlistId'),
     })
+    .secondaryIndexes((index) => [index('alias')])
     .authorization((allow) => [
       allow.owner(),
       allow.guest().to(['read']),

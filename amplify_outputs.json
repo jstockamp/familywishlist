@@ -29,10 +29,14 @@
         "LOGIN_WITH_AMAZON"
       ],
       "redirect_sign_in_uri": [
-        "http://localhost:5173/"
+        "http://localhost:5173/",
+        "https://main.d3vb38mcxea16u.amplifyapp.com/",
+        "https://wishlist.stockamp.net/"
       ],
       "redirect_sign_out_uri": [
-        "http://localhost:5173/"
+        "http://localhost:5173/",
+        "https://main.d3vb38mcxea16u.amplifyapp.com/",
+        "https://wishlist.stockamp.net/"
       ],
       "response_type": "code",
       "scopes": [
@@ -250,6 +254,13 @@
               "isRequired": false,
               "attributes": []
             },
+            "alias": {
+              "name": "alias",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false,
+              "attributes": []
+            },
             "items": {
               "name": "items",
               "isArray": true,
@@ -289,6 +300,16 @@
             {
               "type": "model",
               "properties": {}
+            },
+            {
+              "type": "key",
+              "properties": {
+                "name": "wishlistsByAlias",
+                "queryField": "listWishlistByAlias",
+                "fields": [
+                  "alias"
+                ]
+              }
             },
             {
               "type": "auth",
