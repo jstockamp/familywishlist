@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Scope Amplify UI styles to only the auth wrapper */
+.amplify-auth-wrapper {
+  --amplify-colors-brand-primary-10: #fef3c7;
+  --amplify-colors-brand-primary-80: #f59e0b;
+  --amplify-colors-brand-primary-90: #d97706;
+  --amplify-colors-brand-primary-100: #b45309;
+}

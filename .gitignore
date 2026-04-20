@@ -1,0 +1,7 @@
+node_modules
+dist
+.amplify
+amplify/functions/urlScraper/node_modules
+amplify/functions/markItemPurchased/node_modules
+*.local
+.DS_Store

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(aws sts *)",
+      "Bash(npx --version)",
+      "Bash(npm create *)",
+      "Bash(npx tsc *)",
+      "Bash(aws ssm *)",
+      "Bash(npm run *)",
+      "Bash(aws configure *)",
+      "Bash(aws cloudformation *)",
+      "Bash(xxd)",
+      "Bash(python3 -c ' *)",
+      "Bash(AWS_DEFAULT_REGION=us-west-2 aws cloudformation describe-stacks --stack-name amplify-wishlist-jeff-sandbox-0e86d67d86-data7552DF31-1NXVM5P1CN6S5 --profile wishlist-website-claude --query 'Stacks[0].StackStatus' --output text)",
+      "Bash(AWS_DEFAULT_REGION=us-west-2 aws cloudformation describe-stacks --stack-name amplify-wishlist-jeff-sandbox-0e86d67d86 --profile wishlist-website-claude --query 'Stacks[0].StackStatus' --output text)"
+    ]
+  }
+}
