@@ -129,9 +129,9 @@ export function WishlistPage() {
       const itemResults = await Promise.all(
         junctions.map((j) => readClient.models.Item.get({ id: j.itemId }))
       );
-      const listed: ListedItem[] = junctions
+      const listed = junctions
         .map((j, i) => ({ junctionId: j.id, item: itemResults[i].data }))
-        .filter((p): p is ListedItem => p.item != null);
+        .filter((p) => p.item != null) as ListedItem[];
       setItems(listed);
     } catch (err) {
       console.error('Failed to load wishlist:', err);
