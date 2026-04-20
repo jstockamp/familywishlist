@@ -25,12 +25,11 @@ export const auth = defineAuth({
       },
       callbackUrls: [
         'http://localhost:5173/',
-        // Add your Amplify Hosting URL here after first deployment
-        // 'https://main.XXXXXXXXXXXX.amplifyapp.com/',
+        'https://main.d3vb38mcxea16u.amplifyapp.com/',
       ],
       logoutUrls: [
         'http://localhost:5173/',
-        // 'https://main.XXXXXXXXXXXX.amplifyapp.com/',
+        'https://main.d3vb38mcxea16u.amplifyapp.com/',
       ],
     },
   },
