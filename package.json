@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
     "sandbox": "AWS_DEFAULT_REGION=us-west-2 ampx sandbox --profile wishlist-website-claude",
     "sandbox:delete": "AWS_DEFAULT_REGION=us-west-2 ampx sandbox delete --profile wishlist-website-claude",
