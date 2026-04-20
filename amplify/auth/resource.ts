@@ -26,10 +26,12 @@ export const auth = defineAuth({
       callbackUrls: [
         'http://localhost:5173/',
         'https://main.d3vb38mcxea16u.amplifyapp.com/',
+        'https://wishlist.stockamp.net/',
       ],
       logoutUrls: [
         'http://localhost:5173/',
         'https://main.d3vb38mcxea16u.amplifyapp.com/',
+        'https://wishlist.stockamp.net/',
       ],
     },
   },
