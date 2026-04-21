@@ -78,10 +78,11 @@ function ItemForm({
     setScrapeError('');
     try {
       const { data } = await client.queries.scrapeUrl({ url: url.trim() });
-      if (data) {
+      if (data && (data.title || data.imageUrl || data.price)) {
         if (data.title) setTitle(data.title);
         if (data.imageUrl) setImageUrl(data.imageUrl);
         if (data.price) setPrice(data.price);
+        if (!data.imageUrl) setScrapeError('No thumbnail found — you can add one manually.');
       } else {
         setScrapeError('Could not fetch details — fill in manually.');
       }

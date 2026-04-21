@@ -577,6 +577,6 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     };
   } catch (error) {
     console.error('Error scraping URL:', error);
-    return { title: null, imageUrl: null, price: null, description: null };
+    return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
   }
 };
