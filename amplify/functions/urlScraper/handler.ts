@@ -107,47 +107,67 @@ function isBotPage(html: string): boolean {
   );
 }
 
+/** Pull the best image URL from a Walmart product object (works for both API and __NEXT_DATA__ shapes) */
+function walmartImageFromProduct(p: Record<string, unknown>): string | null {
+  const imgInfo = p?.imageInfo as Record<string, unknown> | undefined;
+  const allImages = imgInfo?.allImages as Array<Record<string, unknown>> | undefined;
+  return (
+    (imgInfo?.thumbnailUrl as string | undefined) ??
+    (allImages?.[0]?.url as string | undefined) ??
+    (p?.primaryImageUrl as string | undefined) ??
+    (p?.primaryImage as string | undefined) ??
+    null
+  );
+}
+
 /**
  * Walmart's internal page-data API returns JSON and sometimes bypasses
  * the PerimeterX challenge that blocks the HTML endpoint.
- * Path: /api/2.0/page/fetch?url=/ip/<itemId>&pageType=item
+ * Tries both /ip/{id} and /ip/{slug}/{id} URL forms.
  */
-async function fetchWalmartApi(itemId: string, headers: Record<string, string>): Promise<ScrapedResult> {
+async function fetchWalmartApi(itemId: string, slug: string, headers: Record<string, string>): Promise<ScrapedResult> {
   const result: ScrapedResult = { title: null, imageUrl: null, price: null, description: null };
-  try {
-    const apiUrl = `https://www.walmart.com/api/2.0/page/fetch?url=%2Fip%2F${itemId}&pageType=item`;
-    const res = await fetch(apiUrl, {
-      headers: { ...headers, Accept: 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) return result;
-    const data = await res.json() as Record<string, unknown>;
+  const paths = slug
+    ? [`%2Fip%2F${encodeURIComponent(slug)}%2F${itemId}`, `%2Fip%2F${itemId}`]
+    : [`%2Fip%2F${itemId}`];
 
-    // The payload structure varies; try a few known paths
-    const item =
-      (data?.payload as Record<string, unknown>)?.product?.item ??
-      (data?.props as Record<string, unknown>)?.pageProps?.initialData?.data?.product;
-    if (!item) return result;
+  for (const path of paths) {
+    try {
+      const apiUrl = `https://www.walmart.com/api/2.0/page/fetch?url=${path}&pageType=item`;
+      const res = await fetch(apiUrl, {
+        headers: { ...headers, Accept: 'application/json' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json() as Record<string, unknown>;
 
-    const i = item as Record<string, unknown>;
-    const title =
-      (i?.product_description as Record<string, unknown>)?.title ??
-      (i?.name as string | undefined);
-    if (typeof title === 'string') result.title = title;
+      // The payload structure varies across Walmart API versions
+      const product =
+        (data?.payload as Record<string, unknown>)?.product?.item ??
+        (data?.props as Record<string, unknown>)?.pageProps?.initialData?.data?.product ??
+        (data?.props as Record<string, unknown>)?.pageProps?.initialData?.data?.idmlMap?.[itemId];
+      if (!product) continue;
 
-    const img =
-      (i?.imageInfo as Record<string, unknown>)?.thumbnailUrl ??
-      (i?.primaryImage as string | undefined);
-    if (typeof img === 'string') result.imageUrl = img;
+      const p = product as Record<string, unknown>;
+      const title =
+        (p?.product_description as Record<string, unknown>)?.title ??
+        (p?.name as string | undefined);
+      if (typeof title === 'string') result.title = title;
 
-    const priceInfo = i?.priceInfo as Record<string, unknown> | undefined;
-    const amount =
-      (priceInfo?.currentPrice as Record<string, unknown>)?.price ??
-      priceInfo?.minPrice;
-    const formatted = formatPrice(amount);
-    if (formatted) result.price = formatted;
-  } catch {
-    // API also blocked or malformed — caller falls back to meta tags
+      const img = walmartImageFromProduct(p);
+      if (img) result.imageUrl = img;
+
+      const priceInfo = p?.priceInfo as Record<string, unknown> | undefined;
+      const amount =
+        (priceInfo?.currentPrice as Record<string, unknown>)?.price ??
+        priceInfo?.minPrice;
+      const formatted = formatPrice(amount);
+      if (formatted) result.price = formatted;
+
+      if (result.title || result.imageUrl) break;
+    } catch {
+      // try next path
+    }
   }
   return result;
 }
@@ -212,9 +232,9 @@ function extractWalmartData(html: string): ScrapedResult {
 
     if (typeof product.name === 'string') result.title = product.name;
 
-    // Image: thumbnailUrl or first imageUrl in media
-    const thumbnail = product.imageInfo?.thumbnailUrl ?? product.primaryImage ?? null;
-    if (typeof thumbnail === 'string') result.imageUrl = thumbnail;
+    // Image: use shared helper that covers all known Walmart product shapes
+    const thumbnail = walmartImageFromProduct(product as Record<string, unknown>);
+    if (thumbnail) result.imageUrl = thumbnail;
 
     // Price: currentPrice or priceRange
     const priceInfo = product.priceInfo ?? product.price;
@@ -450,16 +470,26 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     } else if (hostname.includes('walmart.com')) {
       if (!botBlocked) siteSpecific = extractWalmartData(html);
       // Try JSON API whether or not we got bot-blocked on the HTML endpoint
-      if (!siteSpecific.title) {
-        const itemIdMatch = url.match(/\/ip\/[^/?]+\/(\d+)|\/ip\/(\d+)/);
-        const itemId = itemIdMatch?.[1] ?? itemIdMatch?.[2];
+      if (!siteSpecific.title || !siteSpecific.imageUrl) {
+        const itemIdMatch = finalUrl.match(/\/ip\/([^/?]+)\/(\d+)|\/ip\/(\d+)/);
+        const itemId = itemIdMatch?.[2] ?? itemIdMatch?.[3];
+        const slug = itemIdMatch?.[2] ? (itemIdMatch[1] ?? '') : '';
         if (itemId) {
-          siteSpecific = await fetchWalmartApi(itemId, browserHeaders);
+          const apiResult = await fetchWalmartApi(itemId, slug, browserHeaders);
+          // Merge: prefer API result for any missing fields
+          if (!siteSpecific.title && apiResult.title) siteSpecific.title = apiResult.title;
+          if (!siteSpecific.imageUrl && apiResult.imageUrl) siteSpecific.imageUrl = apiResult.imageUrl;
+          if (!siteSpecific.price && apiResult.price) siteSpecific.price = apiResult.price;
         }
+      }
+      // Last-resort: scan HTML for Walmart CDN image URLs
+      if (!siteSpecific.imageUrl && !botBlocked) {
+        const cdnMatch = html.match(/https:\/\/i5\.walmartimages\.com\/[^"'\s,)]+\.(?:jpg|jpeg|png|webp)/i);
+        if (cdnMatch) siteSpecific.imageUrl = cdnMatch[0];
       }
       // If both attempts failed, return just the URL-slug title rather than bot-page content
       if (botBlocked && !siteSpecific.title) {
-        return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
+        return { title: titleFromUrlSlug(finalUrl), imageUrl: null, price: null, description: null };
       }
     } else if (hostname.includes('amazon.com')) {
       if (!botBlocked) siteSpecific = extractAmazonData(html);
