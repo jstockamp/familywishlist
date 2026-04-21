@@ -96,11 +96,14 @@ function isBotPage(html: string): boolean {
   return (
     title.includes('robot or human') ||
     title.includes('are you a robot') ||
+    title.includes('robot check') ||
     title.includes('access denied') ||
     title.includes('just a moment') ||
     title.includes('please verify') ||
+    title.includes('sorry! something went wrong') ||
     html.includes('px-captcha') ||
-    html.includes('PerimeterX')
+    html.includes('PerimeterX') ||
+    html.includes('captcha-container')
   );
 }
 
@@ -278,6 +281,46 @@ function extractLegoData(html: string): ScrapedResult {
 }
 
 /**
+ * Amazon embeds a JSON map of all product images in data-a-dynamic-image attributes.
+ * Keys are image URLs, values are [width, height] arrays — we pick the largest.
+ * Falls back to data-old-hires (the hi-res version of the main image).
+ */
+function extractAmazonData(html: string): ScrapedResult {
+  const result: ScrapedResult = { title: null, imageUrl: null, price: null, description: null };
+
+  // data-a-dynamic-image='{"https://...jpg":[900,900],...}' (may be HTML-entity-encoded)
+  const dynMatch = html.match(/data-a-dynamic-image=['"](\{[\s\S]*?\})['"]/);
+  if (dynMatch) {
+    try {
+      const decoded = dynMatch[1].replace(/&quot;/g, '"').replace(/&#34;/g, '"');
+      const images = JSON.parse(decoded) as Record<string, [number, number]>;
+      let bestUrl = '';
+      let bestArea = 0;
+      for (const [imgUrl, dims] of Object.entries(images)) {
+        const area = (dims[0] ?? 0) * (dims[1] ?? 0);
+        if (area > bestArea) { bestArea = area; bestUrl = imgUrl; }
+      }
+      if (bestUrl) result.imageUrl = bestUrl;
+    } catch { /* fall through */ }
+  }
+
+  // Fallback: data-old-hires on the main landing image
+  if (!result.imageUrl) {
+    const hiresMatch = html.match(/data-old-hires=["']([^"']+)["']/);
+    if (hiresMatch?.[1]) result.imageUrl = hiresMatch[1];
+  }
+
+  // Fallback: src of #landingImage
+  if (!result.imageUrl) {
+    const landingMatch = html.match(/<img[^>]+id=["']landingImage["'][^>]+src=["']([^"']+)["']/i)
+      ?? html.match(/<img[^>]+src=["']([^"']+)["'][^>]+id=["']landingImage["']/i);
+    if (landingMatch?.[1] && !landingMatch[1].includes('gif')) result.imageUrl = landingMatch[1];
+  }
+
+  return result;
+}
+
+/**
  * Target embeds product data in window.__PRELOADED_STATE__ or a __TGT_DATA__ script.
  */
 function extractTargetData(html: string): ScrapedResult {
@@ -415,6 +458,11 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
       // If both attempts failed, return just the URL-slug title rather than bot-page content
       if (botBlocked && !siteSpecific.title) {
         return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
+      }
+    } else if (hostname.includes('amazon.com')) {
+      if (!botBlocked) siteSpecific = extractAmazonData(html);
+      if (botBlocked && !siteSpecific.imageUrl) {
+        siteSpecific.imageUrl = null;
       }
     } else if (hostname.includes('target.com')) {
       if (!botBlocked) siteSpecific = extractTargetData(html);
