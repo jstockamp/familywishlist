@@ -4,6 +4,7 @@ import { LoginPage } from './pages/LoginPage';
 import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ItemsPage } from './pages/ItemsPage';
+import { SearchPage } from './pages/SearchPage';
 import { WishlistPage } from './pages/WishlistPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
@@ -32,6 +33,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ItemsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <SearchPage />
               </ProtectedRoute>
             }
           />
