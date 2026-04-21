@@ -411,8 +411,6 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
   const { url } = event.arguments;
 
   try {
-    const hostname = new URL(url).hostname.toLowerCase();
-
     const browserHeaders: Record<string, string> = {
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -434,6 +432,10 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
       headers: browserHeaders,
       signal: AbortSignal.timeout(12000),
     });
+
+    // Use the final URL after redirects (handles shorteners like a.co → amazon.com)
+    const finalUrl = response.url || url;
+    const hostname = new URL(finalUrl).hostname.toLowerCase();
 
     const html = await response.text();
     const botBlocked = isBotPage(html);
@@ -531,7 +533,7 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     if (titleMatch?.[1]) htmlTitle = cleanTitle(titleMatch[1].trim());
 
     // --- Merge: site-specific > JSON-LD > OG > HTML fallbacks > URL slug ---
-    const slugTitle = titleFromUrlSlug(url);
+    const slugTitle = titleFromUrlSlug(finalUrl);
     const title = siteSpecific.title || jsonLd.title || amazonTitle || ogTitle || htmlTitle || slugTitle;
     const imageUrl = siteSpecific.imageUrl || jsonLd.imageUrl || ogImage;
     const price = siteSpecific.price || jsonLd.price || metaPrice || amazonPrice;
