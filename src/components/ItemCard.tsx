@@ -128,11 +128,11 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
     return (
       <>
       <div
-        className={`grid grid-cols-[3fr_1fr_1fr_1fr_auto] gap-4 items-center px-4 py-3 transition-colors ${
+        className={`grid grid-cols-[3fr_1fr_1fr_1fr_auto] gap-4 items-start px-4 py-3 transition-colors ${
           item.isPurchased && showPurchasedStatus ? 'bg-green-50/40' : 'hover:bg-gray-50/60'
         }`}
       >
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-start gap-3 min-w-0">
           {item.imageUrl ? (
             <img
               src={item.imageUrl}
@@ -147,7 +147,7 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className={`text-sm font-medium leading-snug truncate ${item.isPurchased && showPurchasedStatus ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+              <p className={`text-sm font-medium leading-snug ${item.isPurchased && showPurchasedStatus ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                 {item.title}
               </p>
               {item.retailer && (
