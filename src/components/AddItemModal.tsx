@@ -116,7 +116,7 @@ function ItemForm({
             disabled={scraping || !url.trim()}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm whitespace-nowrap"
           >
-            {scraping ? 'Fetching…' : 'Fetch details'}
+            {scraping ? 'Fetching…' : imageUrl ? 'Re-fetch' : 'Fetch details'}
           </button>
         </div>
         {scrapeError && <p className="text-xs text-red-500 mt-1">{scrapeError}</p>}
@@ -125,7 +125,7 @@ function ItemForm({
       {imageUrl && (
         <div className="flex items-center gap-3">
           <img src={imageUrl} alt="" className="w-16 h-16 object-contain rounded-lg border border-gray-200"
-            onError={() => setImageUrl('')} />
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           <p className="text-xs text-gray-400 flex-1 break-all line-clamp-2">{imageUrl}</p>
           <button type="button" onClick={() => setImageUrl('')}
             className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
