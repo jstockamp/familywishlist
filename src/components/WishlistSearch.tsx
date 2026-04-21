@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { generateClient } from 'aws-amplify/data';
+import { useAuthenticator } from '@aws-amplify/ui-react';
 import type { Schema } from '../../amplify/data/resource';
 
 const guestClient = generateClient<Schema>({ authMode: 'iam' });
+const authClient = generateClient<Schema>({ authMode: 'userPool' });
 
 type WishlistResult = {
   id: string;
@@ -33,6 +35,8 @@ export function WishlistSearch({
   autoFocus = false,
 }: Props) {
   const navigate = useNavigate();
+  const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
+  const client = authStatus === 'authenticated' ? authClient : guestClient;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<WishlistResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -47,7 +51,7 @@ export function WishlistSearch({
     setSearching(true);
     try {
       const lower = q.toLowerCase();
-      const { data } = await guestClient.models.Wishlist.list({
+      const { data } = await client.models.Wishlist.list({
         filter: {
           or: [
             { name: { contains: q } },
@@ -74,7 +78,7 @@ export function WishlistSearch({
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [client]);
 
   useEffect(() => { search(debouncedQuery); }, [debouncedQuery, search]);
 
