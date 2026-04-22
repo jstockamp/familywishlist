@@ -129,7 +129,7 @@ export function WishlistPage() {
       } else {
         // Alias lookup via secondary index
         const { data } = await readClient.models.Wishlist.listWishlistByAlias({ alias: idParam });
-        wl = Array.isArray(data) ? (data[0] ?? null) : null;
+        wl = data[0] ?? null;
       }
 
       if (!wl) { setNotFound(true); return; }
