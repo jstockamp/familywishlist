@@ -86,7 +86,8 @@ function ItemForm({
       } else {
         setScrapeError('Could not fetch details — fill in manually.');
       }
-    } catch {
+    } catch (err) {
+      console.error('scrapeUrl error:', err);
       setScrapeError('Could not fetch details — fill in manually.');
     } finally {
       setScraping(false);
