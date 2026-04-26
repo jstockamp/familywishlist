@@ -116,8 +116,9 @@ export function WishlistPage() {
   const [aliasError, setAliasError] = useState('');
 
   const loadWishlist = useCallback(async () => {
-    if (!idParam) return;
+    if (!idParam || authStatus === 'configuring') return;
     setLoading(true);
+    setNotFound(false);
     const readClient = authStatus === 'authenticated' ? authClient : guestClient;
     try {
       let wl: Schema['Wishlist']['type'] | null | undefined = null;
