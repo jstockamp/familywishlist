@@ -398,9 +398,6 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
                         <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
                         {item.price && <p className="text-xs text-amber-600">{item.price}</p>}
                       </div>
-                      {item.isPurchased && (
-                        <span className="text-xs text-green-500 flex-shrink-0">✓ Claimed</span>
-                      )}
                     </label>
                   ))}
                 </div>

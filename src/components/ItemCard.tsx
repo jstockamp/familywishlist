@@ -80,7 +80,7 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
           : 'Already claimed'}
       </span>
     </div>
-  ) : item.isPurchased && !showPurchasedStatus ? null : !showNamePrompt ? (
+  ) : item.isPurchased && !showPurchasedStatus ? null : isOwner ? null : !showNamePrompt ? (
     <button
       onClick={() => setShowNamePrompt(true)}
       className="bg-green-500 text-white rounded-lg py-1.5 px-3 text-sm hover:bg-green-600 transition-colors whitespace-nowrap"
