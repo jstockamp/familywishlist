@@ -23,7 +23,7 @@ function detectRetailer(url: string): string {
   if (!url.trim()) return '';
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    if (host.includes('amazon.')) return 'Amazon';
+    if (host.includes('amazon.') || host === 'a.co') return 'Amazon';
     if (host.includes('target.com')) return 'Target';
     if (host.includes('walmart.com')) return 'Walmart';
     if (host.includes('lego.com')) return 'LEGO';
