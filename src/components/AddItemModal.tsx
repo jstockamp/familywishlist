@@ -261,7 +261,7 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
         });
       } else {
         // Create new item in catalog
-        const { data: newItem } = await client.models.Item.create({
+        const { data: newItem, errors: createErrors } = await client.models.Item.create({
           title: fields.title.trim(),
           url: fields.url.trim() || undefined,
           imageUrl: fields.imageUrl.trim() || undefined,
@@ -271,8 +271,11 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
           retailer: fields.retailer.trim() || undefined,
           isPurchased: false,
         });
+        if (!newItem) {
+          throw new Error(`Item.create returned no data. Errors: ${JSON.stringify(createErrors)}`);
+        }
         // If in wishlist mode, also create the junction record
-        if (mode === 'wishlist' && wishlistId && newItem) {
+        if (mode === 'wishlist' && wishlistId) {
           await client.models.WishlistItem.create({ wishlistId, itemId: newItem.id });
         }
       }
