@@ -48,6 +48,7 @@ const schema = a.schema({
       item: a.belongsTo('Item', 'itemId'),
       sortOrder: a.integer(),
     })
+    .secondaryIndexes((index) => [index('wishlistId')])
     .authorization((allow) => [
       allow.owner(),
       allow.guest().to(['read']),

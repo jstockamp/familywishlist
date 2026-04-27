@@ -148,9 +148,9 @@ export function WishlistPage() {
         } catch { setIsOwner(false); }
       }
 
-      // Load junction records, then fetch each Item
-      const { data: junctions } = await readClient.models.WishlistItem.list({
-        filter: { wishlistId: { eq: wl.id } },
+      // Load junction records via GSI (avoids full table scan)
+      const { data: junctions } = await readClient.models.WishlistItem.listWishlistItemByWishlistId({
+        wishlistId: wl.id,
       });
       const itemResults = await Promise.all(
         junctions.map((j) => readClient.models.Item.get({ id: j.itemId }))
