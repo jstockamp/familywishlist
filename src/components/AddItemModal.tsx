@@ -276,7 +276,10 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
         }
         // If in wishlist mode, also create the junction record
         if (mode === 'wishlist' && wishlistId) {
-          await client.models.WishlistItem.create({ wishlistId, itemId: newItem.id });
+          const { data: junction, errors: junctionErrors } = await client.models.WishlistItem.create({ wishlistId, itemId: newItem.id });
+          if (!junction) {
+            throw new Error(`WishlistItem.create failed. Errors: ${JSON.stringify(junctionErrors)}`);
+          }
         }
       }
       onAdded();
@@ -293,11 +296,15 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
     setSaving(true);
     setError('');
     try {
-      await Promise.all(
+      const results = await Promise.all(
         [...selected].map((itemId) =>
           client.models.WishlistItem.create({ wishlistId, itemId })
         )
       );
+      const failed = results.filter((r) => !r.data);
+      if (failed.length > 0) {
+        throw new Error(`WishlistItem.create failed for ${failed.length} item(s). Errors: ${JSON.stringify(failed.map((r) => r.errors))}`);
+      }
       onAdded();
       onClose();
     } catch (err) {
