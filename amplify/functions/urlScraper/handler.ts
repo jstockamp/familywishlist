@@ -165,7 +165,7 @@ async function fetchViaUnlocker(url: string): Promise<string | null> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ zone: 'web_unlocker1', url, format: 'raw' }),
-      signal: AbortSignal.timeout(40000),
+      // No AbortSignal — let the Lambda timeout be the ceiling
     });
     console.log(`Brightdata unlocker responded in ${Date.now() - t0}ms, status=${res.status}`);
     if (!res.ok) {
@@ -470,9 +470,13 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     // --- Site-specific extractors (highest priority) ---
     let siteSpecific: ScrapedResult = { title: null, imageUrl: null, price: null, description: null };
     if (hostname.includes('lego.com')) {
+      // Start Brightdata in parallel — LEGO also blocks Lambda IPs
+      const unlockerPromise = fetchViaUnlocker(finalUrl);
+
       if (!botBlocked) siteSpecific = extractLegoData(html);
+
       if (!siteSpecific.title) {
-        const unlockerHtml = await fetchViaUnlocker(finalUrl);
+        const unlockerHtml = await unlockerPromise;
         if (unlockerHtml && !isBotPage(unlockerHtml)) {
           const fromUnlocker = extractLegoData(unlockerHtml);
           const ldFromUnlocker = extractJsonLd(unlockerHtml);
@@ -484,12 +488,18 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
           };
         }
       }
+
       if (!siteSpecific.title) {
         return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
       }
     } else if (hostname.includes('walmart.com')) {
+      // Start Brightdata in parallel — Walmart almost always bot-blocks Lambda's IP
+      // so we kick off the unlocker immediately rather than waiting for direct fetch to fail.
+      const unlockerPromise = fetchViaUnlocker(finalUrl);
+
       if (!botBlocked) siteSpecific = extractWalmartData(html);
-      // Try Walmart's internal JSON API (sometimes bypasses bot challenge)
+
+      // Try Walmart's internal JSON API (quick, sometimes bypasses bot challenge)
       if (!siteSpecific.title) {
         const itemIdMatch = url.match(/\/ip\/[^/?]+\/(\d+)|\/ip\/(\d+)/);
         const itemId = itemIdMatch?.[1] ?? itemIdMatch?.[2];
@@ -497,9 +507,10 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
           siteSpecific = await fetchWalmartApi(itemId, browserHeaders);
         }
       }
-      // Try Brightdata Web Unlocker as final fallback
+
+      // Wait for Brightdata if we still have no data
       if (!siteSpecific.title) {
-        const unlockerHtml = await fetchViaUnlocker(finalUrl);
+        const unlockerHtml = await unlockerPromise;
         if (unlockerHtml && !isBotPage(unlockerHtml)) {
           const fromUnlocker = extractWalmartData(unlockerHtml);
           const ldFromUnlocker = extractJsonLd(unlockerHtml);
@@ -511,6 +522,7 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
           };
         }
       }
+
       if (!siteSpecific.title) {
         return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
       }
