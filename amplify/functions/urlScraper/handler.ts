@@ -155,7 +155,8 @@ async function fetchWalmartApi(itemId: string, headers: Record<string, string>):
 /** Fetch a URL via Brightdata Web Unlocker, which handles JS bot challenges (Cloudflare, PerimeterX) */
 async function fetchViaUnlocker(url: string): Promise<string | null> {
   const apiKey = process.env.BRIGHTDATA_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) { console.error('BRIGHTDATA_API_KEY not set'); return null; }
+  const t0 = Date.now();
   try {
     const res = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
@@ -164,15 +165,16 @@ async function fetchViaUnlocker(url: string): Promise<string | null> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ zone: 'web_unlocker1', url, format: 'raw' }),
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(40000),
     });
+    console.log(`Brightdata unlocker responded in ${Date.now() - t0}ms, status=${res.status}`);
     if (!res.ok) {
       console.error(`Brightdata unlocker HTTP ${res.status}:`, await res.text().catch(() => ''));
       return null;
     }
     return await res.text();
   } catch (err) {
-    console.error('Brightdata unlocker error:', err);
+    console.error(`Brightdata unlocker error after ${Date.now() - t0}ms:`, err);
     return null;
   }
 }
