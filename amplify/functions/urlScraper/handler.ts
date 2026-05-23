@@ -152,6 +152,31 @@ async function fetchWalmartApi(itemId: string, headers: Record<string, string>):
   return result;
 }
 
+/** Fetch a URL via Brightdata Web Unlocker, which handles JS bot challenges (Cloudflare, PerimeterX) */
+async function fetchViaUnlocker(url: string): Promise<string | null> {
+  const apiKey = process.env.BRIGHTDATA_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch('https://api.brightdata.com/request', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ zone: 'web_unlocker1', url, format: 'raw' }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!res.ok) {
+      console.error(`Brightdata unlocker HTTP ${res.status}:`, await res.text().catch(() => ''));
+      return null;
+    }
+    return await res.text();
+  } catch (err) {
+    console.error('Brightdata unlocker error:', err);
+    return null;
+  }
+}
+
 /** Parse JSON-LD blocks — most reliable for LEGO, Amazon, and some Target/Walmart pages */
 function extractJsonLd(html: string): ScrapedResult {
   const result: ScrapedResult = { title: null, imageUrl: null, price: null, description: null };
@@ -444,12 +469,25 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     let siteSpecific: ScrapedResult = { title: null, imageUrl: null, price: null, description: null };
     if (hostname.includes('lego.com')) {
       if (!botBlocked) siteSpecific = extractLegoData(html);
-      if (botBlocked && !siteSpecific.title) {
+      if (!siteSpecific.title) {
+        const unlockerHtml = await fetchViaUnlocker(finalUrl);
+        if (unlockerHtml && !isBotPage(unlockerHtml)) {
+          const fromUnlocker = extractLegoData(unlockerHtml);
+          const ldFromUnlocker = extractJsonLd(unlockerHtml);
+          siteSpecific = {
+            title: fromUnlocker.title || ldFromUnlocker.title,
+            imageUrl: fromUnlocker.imageUrl || ldFromUnlocker.imageUrl,
+            price: fromUnlocker.price || ldFromUnlocker.price,
+            description: fromUnlocker.description || ldFromUnlocker.description,
+          };
+        }
+      }
+      if (!siteSpecific.title) {
         return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
       }
     } else if (hostname.includes('walmart.com')) {
       if (!botBlocked) siteSpecific = extractWalmartData(html);
-      // Try JSON API whether or not we got bot-blocked on the HTML endpoint
+      // Try Walmart's internal JSON API (sometimes bypasses bot challenge)
       if (!siteSpecific.title) {
         const itemIdMatch = url.match(/\/ip\/[^/?]+\/(\d+)|\/ip\/(\d+)/);
         const itemId = itemIdMatch?.[1] ?? itemIdMatch?.[2];
@@ -457,8 +495,21 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
           siteSpecific = await fetchWalmartApi(itemId, browserHeaders);
         }
       }
-      // If both attempts failed, return just the URL-slug title rather than bot-page content
-      if (botBlocked && !siteSpecific.title) {
+      // Try Brightdata Web Unlocker as final fallback
+      if (!siteSpecific.title) {
+        const unlockerHtml = await fetchViaUnlocker(finalUrl);
+        if (unlockerHtml && !isBotPage(unlockerHtml)) {
+          const fromUnlocker = extractWalmartData(unlockerHtml);
+          const ldFromUnlocker = extractJsonLd(unlockerHtml);
+          siteSpecific = {
+            title: fromUnlocker.title || ldFromUnlocker.title,
+            imageUrl: fromUnlocker.imageUrl || ldFromUnlocker.imageUrl,
+            price: fromUnlocker.price || ldFromUnlocker.price,
+            description: fromUnlocker.description || ldFromUnlocker.description,
+          };
+        }
+      }
+      if (!siteSpecific.title) {
         return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
       }
     } else if (hostname.includes('amazon.com')) {
