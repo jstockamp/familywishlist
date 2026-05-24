@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { generateClient } from 'aws-amplify/data';
 import { useAuthenticator } from '@aws-amplify/ui-react';
@@ -168,6 +168,29 @@ export function WishlistPage() {
   }, [idParam, authStatus]);
 
   useEffect(() => { loadWishlist(); }, [loadWishlist]);
+
+  // Keep a live ref of item IDs on this wishlist so the subscription
+  // can filter without restarting every time items change.
+  const itemIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    itemIdsRef.current = new Set(items.map((li) => li.item.id));
+  }, [items]);
+
+  // Subscribe to Item updates so background Brightdata enrichment is reflected
+  // automatically without requiring a page reload.
+  useEffect(() => {
+    if (!isOwner) return;
+    const sub = authClient.models.Item.onUpdate().subscribe({
+      next: ({ data: updated }) => {
+        if (!updated || !itemIdsRef.current.has(updated.id)) return;
+        setItems((prev) =>
+          prev.map((li) => (li.item.id === updated.id ? { ...li, item: updated } : li))
+        );
+      },
+      error: console.error,
+    });
+    return () => sub.unsubscribe();
+  }, [isOwner]);
 
   function toggleSort(col: SortColumn) {
     if (sortCol === col) {
