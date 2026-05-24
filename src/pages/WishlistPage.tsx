@@ -181,7 +181,7 @@ export function WishlistPage() {
   useEffect(() => {
     if (!isOwner) return;
     const sub = authClient.models.Item.onUpdate().subscribe({
-      next: ({ data: updated }) => {
+      next: (updated) => {
         if (!updated || !itemIdsRef.current.has(updated.id)) return;
         setItems((prev) =>
           prev.map((li) => (li.item.id === updated.id ? { ...li, item: updated } : li))
