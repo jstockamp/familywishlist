@@ -19,6 +19,35 @@ interface Props {
 
 type Tab = 'new' | 'catalog';
 
+function isSlowRetailer(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host.includes('walmart.com') || host.includes('lego.com');
+  } catch { return false; }
+}
+
+function titleFromUrlSlug(url: string): string {
+  try {
+    const { hostname, pathname } = new URL(url);
+    let slug: string | null = null;
+    if (hostname.includes('walmart.com')) {
+      const m = pathname.match(/\/ip\/([^/?]+)\/\d+/);
+      if (m) slug = m[1];
+    } else if (hostname.includes('lego.com')) {
+      const m = pathname.match(/\/product\/([^/?]+)/);
+      if (m) slug = m[1];
+    }
+    if (!slug) return '';
+    return slug
+      .replace(/-/g, ' ')
+      .replace(/\s+\d+$/, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  } catch { return ''; }
+}
+
 function detectRetailer(url: string): string {
   if (!url.trim()) return '';
   try {
@@ -42,6 +71,7 @@ function detectRetailer(url: string): string {
 function ItemForm({
   initial,
   onSave,
+  onFetchAsync,
   saving,
   error,
   submitLabel,
@@ -51,6 +81,7 @@ function ItemForm({
     title: string; url: string; imageUrl: string;
     price: string; notes: string; priority: 'LOW' | 'MEDIUM' | 'HIGH'; retailer: string;
   }) => void;
+  onFetchAsync?: (url: string, retailer: string, slugTitle: string) => void;
   saving: boolean;
   error: string;
   submitLabel: string;
@@ -74,6 +105,12 @@ function ItemForm({
 
   async function fetchDetails() {
     if (!url.trim()) return;
+    // Walmart & LEGO take ~60s via Brightdata — add the item immediately and enrich in background
+    if (onFetchAsync && isSlowRetailer(url.trim())) {
+      const slugTitle = titleFromUrlSlug(url.trim()) || `Item from ${detectRetailer(url.trim()) || 'store'}`;
+      onFetchAsync(url.trim(), detectRetailer(url.trim()), slugTitle);
+      return;
+    }
     setScraping(true);
     setScrapeError('');
     try {
@@ -116,7 +153,13 @@ function ItemForm({
             disabled={scraping || !url.trim()}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm whitespace-nowrap"
           >
-            {scraping ? 'Fetching…' : imageUrl ? 'Re-fetch' : 'Fetch details'}
+            {scraping
+              ? 'Fetching…'
+              : onFetchAsync && isSlowRetailer(url.trim())
+              ? 'Add & fetch details'
+              : imageUrl
+              ? 'Re-fetch'
+              : 'Fetch details'}
           </button>
         </div>
         {scrapeError && <p className="text-xs text-red-500 mt-1">{scrapeError}</p>}
@@ -239,6 +282,46 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
       .catch(console.error)
       .finally(() => setCatalogLoading(false));
   }, [tab, mode, wishlistId]);
+
+  async function handleFetchAsync(url: string, retailer: string, slugTitle: string) {
+    setSaving(true);
+    setError('');
+    try {
+      const { data: newItem, errors: createErrors } = await client.models.Item.create({
+        title: slugTitle,
+        url,
+        retailer: retailer || undefined,
+        isPurchased: false,
+      });
+      if (!newItem) throw new Error(`Item.create failed: ${JSON.stringify(createErrors)}`);
+
+      if (mode === 'wishlist' && wishlistId) {
+        const { data: junction, errors: junctionErrors } = await client.models.WishlistItem.create({
+          wishlistId,
+          itemId: newItem.id,
+        });
+        if (!junction) throw new Error(`WishlistItem.create failed: ${JSON.stringify(junctionErrors)}`);
+      }
+
+      onAdded();
+      onClose();
+
+      // Scrape in background — Lambda takes ~60s for Walmart/LEGO
+      client.queries.scrapeUrl({ url }).then(({ data }) => {
+        if (!data?.title) return;
+        client.models.Item.update({
+          id: newItem.id,
+          title: data.title,
+          imageUrl: data.imageUrl ?? undefined,
+          price: data.price ?? undefined,
+        }).catch(console.error);
+      }).catch(console.error);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to add item. Please try again.');
+      setSaving(false);
+    }
+  }
 
   async function handleSaveNew(fields: {
     title: string; url: string; imageUrl: string;
@@ -437,6 +520,7 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
               <ItemForm
                 initial={editItem ?? undefined}
                 onSave={handleSaveNew}
+                onFetchAsync={!isEditing && mode === 'wishlist' ? handleFetchAsync : undefined}
                 saving={saving}
                 error={error}
                 submitLabel={isEditing ? 'Save changes' : mode === 'wishlist' ? 'Create & add to list' : 'Add to catalog'}
