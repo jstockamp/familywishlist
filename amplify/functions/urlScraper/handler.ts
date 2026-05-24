@@ -165,7 +165,7 @@ async function fetchViaUnlocker(url: string): Promise<string | null> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ zone: 'web_unlocker1', url, format: 'raw' }),
-      // No AbortSignal — let the Lambda timeout be the ceiling
+      signal: AbortSignal.timeout(80000),
     });
     console.log(`Brightdata unlocker responded in ${Date.now() - t0}ms, status=${res.status}`);
     if (!res.ok) {
