@@ -10,11 +10,13 @@ type Item = Schema['Item']['type'];
 
 interface Props {
   item: Item;
-  junctionId: string;   // WishlistItem.id — used to remove from this wishlist
+  junctionId: string;
   isOwner: boolean;
-  revealPurchased?: boolean;  // owner-only toggle; guests always see purchase status
+  revealPurchased?: boolean;
   viewMode?: 'grid' | 'list';
   onChanged: () => void;
+  isFetchingDetails?: boolean;
+  fetchFailed?: boolean;
 }
 
 const priorityLabel: Record<string, string> = {
@@ -23,7 +25,7 @@ const priorityLabel: Record<string, string> = {
   LOW: '⭐',
 };
 
-export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, viewMode = 'grid', onChanged }: Props) {
+export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, viewMode = 'grid', onChanged, isFetchingDetails = false, fetchFailed = false }: Props) {
   // Owners see purchase status only when they've explicitly toggled it on.
   // Guests always see it so they know what's still available.
   const showPurchasedStatus = !isOwner || revealPurchased;
@@ -140,6 +142,10 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
               className="w-10 h-10 object-contain flex-shrink-0 rounded-lg bg-gray-50"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
+          ) : isFetchingDetails ? (
+            <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-amber-50 flex items-center justify-center">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+            </div>
           ) : (
             <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gray-100 flex items-center justify-center text-lg">
               🎁
@@ -152,6 +158,12 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
               </p>
               {item.retailer && (
                 <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">{item.retailer}</span>
+              )}
+              {isFetchingDetails && (
+                <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded flex-shrink-0">Fetching details…</span>
+              )}
+              {fetchFailed && !isFetchingDetails && (
+                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">Details unavailable</span>
               )}
             </div>
             <div className="flex items-center gap-2 mt-0.5">
@@ -224,7 +236,7 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
         item.isPurchased && showPurchasedStatus ? 'opacity-60 border-green-200' : 'border-gray-100 hover:shadow-md'
       }`}
     >
-      {item.imageUrl && (
+      {item.imageUrl ? (
         <div className="w-full h-40 bg-gray-100 overflow-hidden">
           <img
             src={item.imageUrl}
@@ -233,7 +245,12 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         </div>
-      )}
+      ) : isFetchingDetails ? (
+        <div className="w-full h-40 bg-amber-50 flex flex-col items-center justify-center gap-2 animate-pulse">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+          <span className="text-xs text-amber-500">Fetching details…</span>
+        </div>
+      ) : null}
 
       <div className="p-4 flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
@@ -248,9 +265,11 @@ export function ItemCard({ item, junctionId, isOwner, revealPurchased = false, v
         </div>
 
         <div className="flex items-center gap-2">
-          {item.price && (
+          {item.price ? (
             <p className="text-amber-600 font-semibold text-sm">{item.price}</p>
-          )}
+          ) : fetchFailed && !isFetchingDetails ? (
+            <p className="text-xs text-gray-400">Details unavailable — edit to add manually</p>
+          ) : null}
           {item.retailer && (
             <p className="text-gray-400 text-xs">{item.retailer}</p>
           )}

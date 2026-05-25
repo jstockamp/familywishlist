@@ -104,6 +104,8 @@ export function WishlistPage() {
   const [isOwner, setIsOwner] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(new Set());
+  const [failedItemIds, setFailedItemIds] = useState<Set<string>>(new Set());
   const [revealPurchased, setRevealPurchased] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortCol, setSortCol] = useState<SortColumn>('priority');
@@ -186,6 +188,8 @@ export function WishlistPage() {
         setItems((prev) =>
           prev.map((li) => (li.item.id === updated.id ? { ...li, item: updated } : li))
         );
+        setPendingItemIds((prev) => { const s = new Set(prev); s.delete(updated.id); return s; });
+        setFailedItemIds((prev) => { const s = new Set(prev); s.delete(updated.id); return s; });
       },
       error: console.error,
     });
@@ -473,7 +477,9 @@ export function WishlistPage() {
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {gridItems.map((li) => (
-              <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="grid" onChanged={loadWishlist} />
+              <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="grid" onChanged={loadWishlist}
+                isFetchingDetails={pendingItemIds.has(li.item.id)}
+                fetchFailed={failedItemIds.has(li.item.id)} />
             ))}
           </div>
         ) : (
@@ -487,7 +493,9 @@ export function WishlistPage() {
             </div>
             <div className="divide-y divide-gray-50">
               {sortedItems.map((li) => (
-                <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="list" onChanged={loadWishlist} />
+                <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="list" onChanged={loadWishlist}
+                  isFetchingDetails={pendingItemIds.has(li.item.id)}
+                  fetchFailed={failedItemIds.has(li.item.id)} />
               ))}
             </div>
           </div>
@@ -500,6 +508,13 @@ export function WishlistPage() {
           wishlistId={wishlistId}
           onClose={() => setShowAddItem(false)}
           onAdded={loadWishlist}
+          onFetchAsyncStarted={(itemId) =>
+            setPendingItemIds((prev) => new Set([...prev, itemId]))
+          }
+          onFetchAsyncDone={(itemId, success) => {
+            setPendingItemIds((prev) => { const s = new Set(prev); s.delete(itemId); return s; });
+            if (!success) setFailedItemIds((prev) => new Set([...prev, itemId]));
+          }}
         />
       )}
     </div>

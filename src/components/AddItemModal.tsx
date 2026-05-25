@@ -12,9 +12,11 @@ type Item = Schema['Item']['type'];
 interface Props {
   mode: 'catalog' | 'wishlist';
   wishlistId?: string;
-  editItem?: Item;          // provided when editing an existing item
+  editItem?: Item;
   onClose: () => void;
   onAdded: () => void;
+  onFetchAsyncStarted?: (itemId: string) => void;
+  onFetchAsyncDone?: (itemId: string, success: boolean) => void;
 }
 
 type Tab = 'new' | 'catalog';
@@ -248,7 +250,7 @@ function ItemForm({
   );
 }
 
-export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: Props) {
+export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded, onFetchAsyncStarted, onFetchAsyncDone }: Props) {
   const [tab, setTab] = useState<Tab>(mode === 'wishlist' ? 'catalog' : 'new');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -305,17 +307,27 @@ export function AddItemModal({ mode, wishlistId, editItem, onClose, onAdded }: P
 
       onAdded();
       onClose();
+      onFetchAsyncStarted?.(newItem.id);
 
       // Scrape in background — Lambda takes ~60s for Walmart/LEGO
       client.queries.scrapeUrl({ url }).then(({ data }) => {
-        if (!data?.title) return;
+        if (!data?.title) {
+          onFetchAsyncDone?.(newItem.id, false);
+          return;
+        }
         client.models.Item.update({
           id: newItem.id,
           title: data.title,
           imageUrl: data.imageUrl ?? undefined,
           price: data.price ?? undefined,
-        }).catch(console.error);
-      }).catch(console.error);
+        }).then(() => {
+          onFetchAsyncDone?.(newItem.id, true);
+        }).catch(() => {
+          onFetchAsyncDone?.(newItem.id, false);
+        });
+      }).catch(() => {
+        onFetchAsyncDone?.(newItem.id, false);
+      });
     } catch (err) {
       console.error(err);
       setError('Failed to add item. Please try again.');
