@@ -152,29 +152,24 @@ async function fetchWalmartApi(itemId: string, headers: Record<string, string>):
   return result;
 }
 
-/** Fetch a URL via Brightdata Web Unlocker, which handles JS bot challenges (Cloudflare, PerimeterX) */
-async function fetchViaUnlocker(url: string): Promise<string | null> {
-  const apiKey = process.env.BRIGHTDATA_API_KEY;
-  if (!apiKey) { console.error('BRIGHTDATA_API_KEY not set'); return null; }
+/** Fetch a URL via ScraperAPI, which rotates proxies and handles bot challenges */
+async function fetchViaScraper(url: string): Promise<string | null> {
+  const apiKey = process.env.SCRAPERAPI_KEY;
+  if (!apiKey) { console.error('SCRAPERAPI_KEY not set'); return null; }
   const t0 = Date.now();
   try {
-    const res = await fetch('https://api.brightdata.com/request', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ zone: 'web_unlocker1', url, format: 'raw', country: 'us' }),
-      signal: AbortSignal.timeout(150000),
+    const scraperUrl = `https://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true&country_code=us`;
+    const res = await fetch(scraperUrl, {
+      signal: AbortSignal.timeout(70000),
     });
-    console.log(`Brightdata unlocker responded in ${Date.now() - t0}ms, status=${res.status}`);
+    console.log(`ScraperAPI responded in ${Date.now() - t0}ms, status=${res.status}`);
     if (!res.ok) {
-      console.error(`Brightdata unlocker HTTP ${res.status}:`, await res.text().catch(() => ''));
+      console.error(`ScraperAPI HTTP ${res.status}:`, await res.text().catch(() => ''));
       return null;
     }
     return await res.text();
   } catch (err) {
-    console.error(`Brightdata unlocker error after ${Date.now() - t0}ms:`, err);
+    console.error(`ScraperAPI error after ${Date.now() - t0}ms:`, err);
     return null;
   }
 }
@@ -470,8 +465,8 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     // --- Site-specific extractors (highest priority) ---
     let siteSpecific: ScrapedResult = { title: null, imageUrl: null, price: null, description: null };
     if (hostname.includes('lego.com')) {
-      // Start Brightdata in parallel — LEGO also blocks Lambda IPs
-      const unlockerPromise = fetchViaUnlocker(finalUrl);
+      // Start ScraperAPI in parallel — LEGO blocks Lambda IPs
+      const unlockerPromise = fetchViaScraper(finalUrl);
 
       if (!botBlocked) siteSpecific = extractLegoData(html);
 
@@ -493,9 +488,8 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
         return { title: titleFromUrlSlug(url), imageUrl: null, price: null, description: null };
       }
     } else if (hostname.includes('walmart.com')) {
-      // Start Brightdata in parallel — Walmart almost always bot-blocks Lambda's IP
-      // so we kick off the unlocker immediately rather than waiting for direct fetch to fail.
-      const unlockerPromise = fetchViaUnlocker(finalUrl);
+      // Start ScraperAPI in parallel — Walmart bot-blocks Lambda IPs
+      const unlockerPromise = fetchViaScraper(finalUrl);
 
       if (!botBlocked) siteSpecific = extractWalmartData(html);
 
@@ -508,7 +502,7 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
         }
       }
 
-      // Wait for Brightdata if we still have no data
+      // Wait for ScraperAPI if we still have no data
       if (!siteSpecific.title) {
         const unlockerHtml = await unlockerPromise;
         if (unlockerHtml && !isBotPage(unlockerHtml)) {
