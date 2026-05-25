@@ -164,8 +164,8 @@ async function fetchViaUnlocker(url: string): Promise<string | null> {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ zone: 'web_unlocker1', url, format: 'raw' }),
-      signal: AbortSignal.timeout(80000),
+      body: JSON.stringify({ zone: 'web_unlocker1', url, format: 'raw', country: 'us' }),
+      signal: AbortSignal.timeout(150000),
     });
     console.log(`Brightdata unlocker responded in ${Date.now() - t0}ms, status=${res.status}`);
     if (!res.ok) {
