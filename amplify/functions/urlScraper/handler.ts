@@ -158,7 +158,7 @@ async function fetchViaScraper(url: string): Promise<string | null> {
   if (!apiKey) { console.error('SCRAPERAPI_KEY not set'); return null; }
   const t0 = Date.now();
   try {
-    const scraperUrl = `https://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true&country_code=us`;
+    const scraperUrl = `https://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true&country_code=us&premium=true`;
     const res = await fetch(scraperUrl, {
       signal: AbortSignal.timeout(70000),
     });
