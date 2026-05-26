@@ -160,14 +160,18 @@ async function fetchViaScraper(url: string): Promise<string | null> {
   try {
     const scraperUrl = `https://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&country_code=us&premium=true`;
     const res = await fetch(scraperUrl, {
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
     console.log(`ScraperAPI responded in ${Date.now() - t0}ms, status=${res.status}`);
     if (!res.ok) {
       console.error(`ScraperAPI HTTP ${res.status}:`, await res.text().catch(() => ''));
       return null;
     }
-    return await res.text();
+    const html = await res.text();
+    const hasNextData = html.includes('__NEXT_DATA__');
+    const isBotBlocked = isBotPage(html);
+    console.log(`ScraperAPI html: ${html.length} bytes, hasNextData=${hasNextData}, botBlocked=${isBotBlocked}`);
+    return html;
   } catch (err) {
     console.error(`ScraperAPI error after ${Date.now() - t0}ms:`, err);
     return null;
