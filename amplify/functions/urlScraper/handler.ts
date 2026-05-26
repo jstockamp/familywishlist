@@ -466,11 +466,16 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     const html = await response.text();
     const botBlocked = isBotPage(html);
 
+    // Strip tracking query params so ScraperAPI gets the canonical product URL,
+    // not whatever redirect URL Walmart/LEGO served to Lambda's bot-flagged IP.
+    const cleanUrl = (() => { try { const u = new URL(url); u.search = ''; return u.toString(); } catch { return url; } })();
+    console.log(`url=${url} finalUrl=${finalUrl} cleanUrl=${cleanUrl} botBlocked=${botBlocked}`);
+
     // --- Site-specific extractors (highest priority) ---
     let siteSpecific: ScrapedResult = { title: null, imageUrl: null, price: null, description: null };
     if (hostname.includes('lego.com')) {
       // Start ScraperAPI in parallel — LEGO blocks Lambda IPs
-      const unlockerPromise = fetchViaScraper(finalUrl);
+      const unlockerPromise = fetchViaScraper(cleanUrl);
 
       if (!botBlocked) siteSpecific = extractLegoData(html);
 
@@ -493,7 +498,7 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
       }
     } else if (hostname.includes('walmart.com')) {
       // Start ScraperAPI in parallel — Walmart bot-blocks Lambda IPs
-      const unlockerPromise = fetchViaScraper(finalUrl);
+      const unlockerPromise = fetchViaScraper(cleanUrl);
 
       if (!botBlocked) siteSpecific = extractWalmartData(html);
 
