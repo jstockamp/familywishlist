@@ -463,12 +463,12 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
     const finalUrl = response.url || url;
     const hostname = new URL(finalUrl).hostname.toLowerCase();
 
-    const html = await response.text();
+    let html = await response.text();
     const botBlocked = isBotPage(html);
 
-    // Strip tracking query params so ScraperAPI gets the canonical product URL,
-    // not whatever redirect URL Walmart/LEGO served to Lambda's bot-flagged IP.
-    const cleanUrl = (() => { try { const u = new URL(url); u.search = ''; return u.toString(); } catch { return url; } })();
+    // Strip tracking query params from the expanded URL so ScraperAPI gets the
+    // canonical product URL (important for a.co shortlinks and Walmart tracker params).
+    const cleanUrl = (() => { try { const u = new URL(finalUrl); u.search = ''; return u.toString(); } catch { return finalUrl; } })();
     console.log(`url=${url} finalUrl=${finalUrl} cleanUrl=${cleanUrl} botBlocked=${botBlocked}`);
 
     // --- Site-specific extractors (highest priority) ---
@@ -531,8 +531,16 @@ export const handler = async (event: HandlerEvent): Promise<ScrapedResult> => {
       }
     } else if (hostname.includes('amazon.com')) {
       if (!botBlocked) siteSpecific = extractAmazonData(html);
-      if (botBlocked && !siteSpecific.imageUrl) {
-        siteSpecific.imageUrl = null;
+
+      // Amazon frequently bot-blocks Lambda IPs. Fall back to ScraperAPI whenever
+      // the direct fetch is blocked or returns no image (sign-in/captcha pages
+      // don't trip isBotPage but also have no product data).
+      if (botBlocked || !siteSpecific.imageUrl) {
+        const scraperHtml = await fetchViaScraper(cleanUrl);
+        if (scraperHtml && !isBotPage(scraperHtml)) {
+          html = scraperHtml;
+          siteSpecific = extractAmazonData(scraperHtml);
+        }
       }
     } else if (hostname.includes('target.com')) {
       if (!botBlocked) siteSpecific = extractTargetData(html);
