@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { generateClient } from 'aws-amplify/data';
 import { useAuthenticator } from '@aws-amplify/ui-react';
@@ -66,6 +66,37 @@ function SortIcon({ dir }: { dir: SortDir | null }) {
     <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-amber-500">
       <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
     </svg>
+  );
+}
+
+type PriorityKey = 'HIGH' | 'MEDIUM' | 'LOW' | null;
+const SECTION_ORDER: PriorityKey[] = ['HIGH', 'MEDIUM', 'LOW', null];
+const SECTION_LABELS: Record<string, string> = {
+  HIGH: 'High Priority',
+  MEDIUM: 'Medium Priority',
+  LOW: 'Low Priority',
+  none: 'No Priority',
+};
+
+function buildSections(listedItems: ListedItem[]) {
+  return SECTION_ORDER
+    .map((p) => ({
+      key: p ?? 'none',
+      label: SECTION_LABELS[p ?? 'none'],
+      items: listedItems.filter((li) => (li.item.priority ?? null) === p),
+    }))
+    .filter((s) => s.items.length > 0);
+}
+
+function SectionHeader({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+        {label}
+      </span>
+      <div className="flex-1 border-t border-gray-200" />
+      <span className="text-xs text-gray-300">{count}</span>
+    </div>
   );
 }
 
@@ -475,11 +506,18 @@ export function WishlistPage() {
             )}
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {gridItems.map((li) => (
-              <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="grid" onChanged={loadWishlist}
-                isFetchingDetails={pendingItemIds.has(li.item.id)}
-                fetchFailed={failedItemIds.has(li.item.id)} />
+          <div className="space-y-10">
+            {buildSections(gridItems).map((section) => (
+              <div key={section.key}>
+                <SectionHeader label={section.label} count={section.items.length} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {section.items.map((li) => (
+                    <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="grid" onChanged={loadWishlist}
+                      isFetchingDetails={pendingItemIds.has(li.item.id)}
+                      fetchFailed={failedItemIds.has(li.item.id)} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         ) : (
@@ -491,11 +529,22 @@ export function WishlistPage() {
               <ColHeader label="Status" col="status" active={sortCol} dir={sortDir} onClick={toggleSort} />
               <span />
             </div>
-            <div className="divide-y divide-gray-50">
-              {sortedItems.map((li) => (
-                <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="list" onChanged={loadWishlist}
-                  isFetchingDetails={pendingItemIds.has(li.item.id)}
-                  fetchFailed={failedItemIds.has(li.item.id)} />
+            <div>
+              {buildSections(sortedItems).map((section, si) => (
+                <Fragment key={section.key}>
+                  <div className={`flex items-center gap-3 px-4 py-2 bg-gray-50 ${si > 0 ? 'border-t-2 border-gray-100' : ''}`}>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{section.label}</span>
+                    <div className="flex-1 h-px bg-gray-200" />
+                    <span className="text-xs text-gray-300">{section.items.length}</span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {section.items.map((li) => (
+                      <ItemCard key={li.junctionId} item={li.item} junctionId={li.junctionId} isOwner={isOwner} revealPurchased={revealPurchased} viewMode="list" onChanged={loadWishlist}
+                        isFetchingDetails={pendingItemIds.has(li.item.id)}
+                        fetchFailed={failedItemIds.has(li.item.id)} />
+                    ))}
+                  </div>
+                </Fragment>
               ))}
             </div>
           </div>
